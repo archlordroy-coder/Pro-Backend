@@ -112,9 +112,9 @@ app.post('/api/orders', async (req, res) => {
         res.status(500).json({ error: 'Failed to add order' });
     }
 });
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+// const PORT = process.env.PORT || 3000;
+// app.listen(PORT, () => {
+//     console.log(`Server is running on port ${PORT}`);
+// });
 export default app;
 //# sourceMappingURL=index.js.map
