@@ -23,6 +23,11 @@ const db = getFirestore(appFirebase);
 const app = express();
 app.use(express.json());
 
+// Racine de l'API
+app.get('/', (req, res) => {
+    res.status(200).json({ message: 'Pro Informatique API is up and running' });
+});
+
 // Basic Route to test Firestore connection
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'API is running and connected to Firestore (Client SDK)' });
