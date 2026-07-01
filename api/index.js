@@ -1,13 +1,8 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = __importDefault(require("express"));
-const dotenv_1 = __importDefault(require("dotenv"));
-const app_1 = require("firebase/app");
-const firestore_1 = require("firebase/firestore");
-dotenv_1.default.config();
+import express from 'express';
+import dotenv from 'dotenv';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, addDoc } from 'firebase/firestore';
+dotenv.config();
 // Firebase configuration provided by user
 const firebaseConfig = {
     apiKey: process.env.FIREBASE_API_KEY,
@@ -19,10 +14,10 @@ const firebaseConfig = {
     measurementId: process.env.FIREBASE_MEASUREMENT_ID,
 };
 // Initialize Firebase Client
-const appFirebase = (0, app_1.initializeApp)(firebaseConfig);
-const db = (0, firestore_1.getFirestore)(appFirebase);
-const app = (0, express_1.default)();
-app.use(express_1.default.json());
+const appFirebase = initializeApp(firebaseConfig);
+const db = getFirestore(appFirebase);
+const app = express();
+app.use(express.json());
 // Racine de l'API
 app.get('/', (req, res) => {
     res.status(200).json({ message: 'Pro Informatique API is up and running' });
@@ -34,8 +29,8 @@ app.get('/api/health', (req, res) => {
 // --- Services ---
 app.get('/api/services', async (req, res) => {
     try {
-        const servicesCol = (0, firestore_1.collection)(db, 'services');
-        const servicesSnapshot = await (0, firestore_1.getDocs)(servicesCol);
+        const servicesCol = collection(db, 'services');
+        const servicesSnapshot = await getDocs(servicesCol);
         const servicesList = servicesSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -50,8 +45,8 @@ app.get('/api/services', async (req, res) => {
 app.post('/api/services', async (req, res) => {
     try {
         const newService = req.body;
-        const servicesCol = (0, firestore_1.collection)(db, 'services');
-        const docRef = await (0, firestore_1.addDoc)(servicesCol, newService);
+        const servicesCol = collection(db, 'services');
+        const docRef = await addDoc(servicesCol, newService);
         res.status(201).json({ id: docRef.id, message: 'Service created successfully' });
     }
     catch (error) {
@@ -62,8 +57,8 @@ app.post('/api/services', async (req, res) => {
 // --- Products ---
 app.get('/api/products', async (req, res) => {
     try {
-        const productsCol = (0, firestore_1.collection)(db, 'products');
-        const productsSnapshot = await (0, firestore_1.getDocs)(productsCol);
+        const productsCol = collection(db, 'products');
+        const productsSnapshot = await getDocs(productsCol);
         const productsList = productsSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -78,8 +73,8 @@ app.get('/api/products', async (req, res) => {
 app.post('/api/products', async (req, res) => {
     try {
         const newProduct = req.body;
-        const productsCol = (0, firestore_1.collection)(db, 'products');
-        const docRef = await (0, firestore_1.addDoc)(productsCol, newProduct);
+        const productsCol = collection(db, 'products');
+        const docRef = await addDoc(productsCol, newProduct);
         res.status(201).json({ id: docRef.id, message: 'Product created successfully' });
     }
     catch (error) {
@@ -91,8 +86,8 @@ app.post('/api/products', async (req, res) => {
 // GET /api/orders
 app.get('/api/orders', async (req, res) => {
     try {
-        const ordersCol = (0, firestore_1.collection)(db, 'orders');
-        const ordersSnapshot = await (0, firestore_1.getDocs)(ordersCol);
+        const ordersCol = collection(db, 'orders');
+        const ordersSnapshot = await getDocs(ordersCol);
         const ordersList = ordersSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -108,8 +103,8 @@ app.get('/api/orders', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
     try {
         const newOrder = req.body;
-        const ordersCol = (0, firestore_1.collection)(db, 'orders');
-        const docRef = await (0, firestore_1.addDoc)(ordersCol, newOrder);
+        const ordersCol = collection(db, 'orders');
+        const docRef = await addDoc(ordersCol, newOrder);
         res.status(201).json({ id: docRef.id, message: 'Order created successfully' });
     }
     catch (error) {
@@ -121,5 +116,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
-exports.default = app;
+export default app;
 //# sourceMappingURL=index.js.map
