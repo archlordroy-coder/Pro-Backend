@@ -1,43 +1,52 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, addDoc } from 'firebase/firestore';
+import cors from 'cors';
+import { initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 dotenv.config();
 
-// Firebase configuration provided by user
-const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY || '',
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
-  projectId: process.env.FIREBASE_PROJECT_ID || '',
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: process.env.FIREBASE_APP_ID || '',
-  measurementId: process.env.FIREBASE_MEASUREMENT_ID || '',
-};
+// Configuration Firebase Admin (Requires service account JSON)
+// Assumes GOOGLE_APPLICATION_CREDENTIALS points to the service account JSON file
+initializeApp();
 
-// Initialize Firebase Client
-const appFirebase = initializeApp(firebaseConfig);
-const db = getFirestore(appFirebase);
-
+const auth = getAuth();
+const db = getFirestore();
 const app = express();
+
+app.use(cors({ origin: 'https://proinformatique.dev' }));
 app.use(express.json());
+
+// Middleware d'authentification
+const authenticate = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const token = authHeader.split('Bearer ')[1];
+    try {
+        await auth.verifyIdToken(token);
+        next();
+    } catch (error) {
+        res.status(401).json({ error: 'Invalid or expired token' });
+    }
+};
 
 // Racine de l'API
 app.get('/', (req, res) => {
     res.status(200).json({ message: 'Pro Informatique API is up and running' });
 });
 
-// Basic Route to test Firestore connection
-app.get('/api/health', (req, res) => {
-    res.status(200).json({ status: 'API is running and connected to Firestore (Client SDK)' });
-});
+// Appliquer l'authentification aux routes protégées
+app.use('/api/services', authenticate);
+app.use('/api/products', authenticate);
+app.use('/api/orders', authenticate);
 
 // --- Services ---
 app.get('/api/services', async (req, res) => {
     try {
-        const servicesCol = collection(db, 'services');
-        const servicesSnapshot = await getDocs(servicesCol);
+        const servicesSnapshot = await db.collection('services').get();
         const servicesList = servicesSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -52,8 +61,7 @@ app.get('/api/services', async (req, res) => {
 app.post('/api/services', async (req, res) => {
     try {
         const newService = req.body;
-        const servicesCol = collection(db, 'services');
-        const docRef = await addDoc(servicesCol, newService);
+        const docRef = await db.collection('services').add(newService);
         res.status(201).json({ id: docRef.id, message: 'Service created successfully' });
     } catch (error) {
         console.error('Error adding service:', error);
@@ -64,8 +72,7 @@ app.post('/api/services', async (req, res) => {
 // --- Products ---
 app.get('/api/products', async (req, res) => {
     try {
-        const productsCol = collection(db, 'products');
-        const productsSnapshot = await getDocs(productsCol);
+        const productsSnapshot = await db.collection('products').get();
         const productsList = productsSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -80,8 +87,7 @@ app.get('/api/products', async (req, res) => {
 app.post('/api/products', async (req, res) => {
     try {
         const newProduct = req.body;
-        const productsCol = collection(db, 'products');
-        const docRef = await addDoc(productsCol, newProduct);
+        const docRef = await db.collection('products').add(newProduct);
         res.status(201).json({ id: docRef.id, message: 'Product created successfully' });
     } catch (error) {
         console.error('Error adding product:', error);
@@ -90,11 +96,9 @@ app.post('/api/products', async (req, res) => {
 });
 
 // --- Orders ---
-// GET /api/orders
 app.get('/api/orders', async (req, res) => {
     try {
-        const ordersCol = collection(db, 'orders');
-        const ordersSnapshot = await getDocs(ordersCol);
+        const ordersSnapshot = await db.collection('orders').get();
         const ordersList = ordersSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -106,12 +110,10 @@ app.get('/api/orders', async (req, res) => {
     }
 });
 
-// POST /api/orders
 app.post('/api/orders', async (req, res) => {
     try {
         const newOrder = req.body;
-        const ordersCol = collection(db, 'orders');
-        const docRef = await addDoc(ordersCol, newOrder);
+        const docRef = await db.collection('orders').add(newOrder);
         res.status(201).json({ id: docRef.id, message: 'Order created successfully' });
     } catch (error) {
         console.error('Error adding order:', error);
@@ -119,8 +121,4 @@ app.post('/api/orders', async (req, res) => {
     }
 });
 
-// const PORT = process.env.PORT || 3000;
-// app.listen(PORT, () => {
-//     console.log(`Server is running on port ${PORT}`);
-// });
 export default app;
