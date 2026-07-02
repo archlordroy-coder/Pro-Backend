@@ -25,6 +25,9 @@ const authenticate = async (req: express.Request, res: express.Response, next: e
         return res.status(401).json({ error: 'Unauthorized' });
     }
     const token = authHeader.split('Bearer ')[1];
+    if (!token) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
     try {
         await auth.verifyIdToken(token);
         next();
