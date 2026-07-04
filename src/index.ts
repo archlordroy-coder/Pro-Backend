@@ -1,16 +1,29 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
-import { initializeApp } from 'firebase-admin/app';
+import { initializeApp, getApps, getApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
 dotenv.config();
 
-// Configuration Firebase Admin (Requires service account JSON)
-// Assumes GOOGLE_APPLICATION_CREDENTIALS points to the service account JSON file
-initializeApp();
+// Configuration Firebase Admin
+let adminApp;
+if (getApps().length > 0) {
+  adminApp = getApp();
+} else {
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (serviceAccountJson) {
+    const serviceAccount = JSON.parse(serviceAccountJson);
+    adminApp = initializeApp({
+      credential: require('firebase-admin').credential.cert(serviceAccount),
+    });
+  } else {
+    // Utilise les identifiants par défaut (GOOGLE_APPLICATION_CREDENTIALS)
+    adminApp = initializeApp();
+  }
+}
 
-const db = getFirestore();
+const db = getFirestore(adminApp);
 const app = express();
 
 app.use(cors({ origin: '*' }));
@@ -239,6 +252,56 @@ app.put('/computers/:id', async (req, res) => {
     } catch (error) {
         console.error('Error updating computer:', error);
         res.status(500).json({ error: 'Failed to update computer' });
+    }
+});
+
+// --- Promotions ---
+app.get('/promotions', async (req, res) => {
+    try {
+        const promotionsSnapshot = await db.collection('promotions').get();
+        const promotionsList = promotionsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        res.status(200).json(promotionsList);
+    } catch (error) {
+        console.error('Error fetching promotions:', error);
+        res.status(500).json({ error: 'Failed to fetch promotions' });
+    }
+});
+
+app.post('/promotions', async (req, res) => {
+    try {
+        const newPromotion = req.body;
+        const docRef = await db.collection('promotions').doc(newPromotion.id);
+        await docRef.set(newPromotion);
+        res.status(201).json({ id: newPromotion.id, message: 'Promotion created successfully' });
+    } catch (error) {
+        console.error('Error adding promotion:', error);
+        res.status(500).json({ error: 'Failed to add promotion' });
+    }
+});
+
+app.put('/promotions/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updatedPromotion = req.body;
+        await db.collection('promotions').doc(id).update(updatedPromotion);
+        res.status(200).json({ message: 'Promotion updated successfully' });
+    } catch (error) {
+        console.error('Error updating promotion:', error);
+        res.status(500).json({ error: 'Failed to update promotion' });
+    }
+});
+
+app.delete('/promotions/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.collection('promotions').doc(id).delete();
+        res.status(200).json({ message: 'Promotion deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting promotion:', error);
+        res.status(500).json({ error: 'Failed to delete promotion' });
     }
 });
 
