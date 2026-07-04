@@ -23,13 +23,22 @@ import logger from './lib/logger.js';
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const app = express();
 
+// Handle OPTIONS requests FIRST for CORS preflight
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,Origin,X-Requested-With,Accept');
+  res.header('Access-Control-Max-Age', '600');
+  res.sendStatus(200);
+});
+
 // Initialize Firebase
 initializeFirebase().catch(err => {
   logger.error('Failed to initialize Firebase:', err);
 });
 
 // Middleware
-app.use(corsMiddleware()); // CORS protection FIRST!
+app.use(corsMiddleware()); // CORS protection
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 })); // Security headers with CORS support
