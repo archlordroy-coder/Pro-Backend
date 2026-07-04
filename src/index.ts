@@ -80,12 +80,10 @@ app.use('/v1/reviews', reviewsRoutes);
 app.use('/v1/cyber-tickets', ticketsRoutes);
 app.use('/v1/computers', computersRoutes);
 app.use('/v1/users', usersRoutes);
-// app.use('/v1/products', productRoutes);
-// app.use('/v1/promotions', promotionRoutes);
-// app.use('/v1/reviews', reviewRoutes);
-// app.use('/v1/cyber-tickets', ticketRoutes);
-// app.use('/v1/computers', computerRoutes);
-// app.use('/v1/users', userRoutes);
+
+// Compatibility aliases (without v1)
+app.use('/services', servicesRoutes);
+app.use('/products', productsRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -109,7 +107,7 @@ const server = app.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGTERM', (err: NodeJS.Signals) => {
+process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
   server.close(() => {
     logger.info('Server closed');
@@ -117,7 +115,7 @@ process.on('SIGTERM', (err: NodeJS.Signals) => {
   });
 });
 
-process.on('SIGINT', (err: NodeJS.Signals) => {
+process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
   server.close(() => {
     logger.info('Server closed');
