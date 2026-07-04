@@ -68,3 +68,18 @@ dist/
 
 # dataconnect generated files
 .dataconnect
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+coverage/
+.nyc_output/
