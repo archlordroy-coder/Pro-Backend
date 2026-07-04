@@ -1,540 +1,128 @@
+import 'dotenv/config';
 import express from 'express';
-import dotenv from 'dotenv';
-import cors from 'cors';
-import { initializeApp, getApps, getApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import swaggerUi from 'swagger-ui-express';
+import { initializeFirebase } from './lib/firebase.js';
+import { corsMiddleware } from './middleware/cors.js';
+import { requestLogger } from './middleware/logging.js';
+import { errorHandler } from './middleware/error.js';
+import { swaggerSpec } from './lib/swagger.js';
+import healthRoutes from './routes/health.js';
+import authRoutes from './routes/auth.js';
+import servicesRoutes from './routes/services.js';
+import productsRoutes from './routes/products.js';
+import promotionsRoutes from './routes/promotions.js';
+import reviewsRoutes from './routes/reviews.js';
+import ticketsRoutes from './routes/tickets.js';
+import computersRoutes from './routes/computers.js';
+import usersRoutes from './routes/users.js';
+import { sendSuccess } from './lib/responses.js';
+import logger from './lib/logger.js';
 
-dotenv.config();
-
-// Configuration Firebase Admin
-let adminApp;
-let db;
-
-try {
-  if (getApps().length > 0) {
-    adminApp = getApp();
-  } else {
-    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (serviceAccountJson) {
-      const serviceAccount = JSON.parse(serviceAccountJson);
-      adminApp = initializeApp({
-        credential: require('firebase-admin').credential.cert(serviceAccount),
-      });
-      console.log('Firebase initialized with service account JSON');
-    } else {
-      // Utilise les identifiants par défaut (GOOGLE_APPLICATION_CREDENTIALS)
-      adminApp = initializeApp();
-      console.log('Firebase initialized with default credentials');
-    }
-  }
-  db = getFirestore(adminApp);
-  console.log('Firestore database connected successfully');
-} catch (error) {
-  console.error('Firebase initialization error:', error);
-  console.error('API will run in mock mode without database');
-  db = null;
-}
-
+const PORT = parseInt(process.env.PORT || '3000', 10);
 const app = express();
 
-app.use(cors({ origin: '*' }));
-app.use(express.json());
+// Initialize Firebase
+initializeFirebase().catch(err => {
+  logger.error('Failed to initialize Firebase:', err);
+});
 
-// Racine de l'API
+// Middleware
+app.use(helmet()); // Security headers
+app.use(corsMiddleware()); // CORS protection
+app.use(express.json()); // JSON body parser
+app.use(express.urlencoded({ extended: true })); // URL encoded body parser
+
+// Logging
+app.use(requestLogger);
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests, please try again later.',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+app.use(limiter);
+
+// Root endpoint
 app.get('/', (req, res) => {
-    res.status(200).json({ message: 'Pro Informatique API is up and running', dbConnected: !!db });
+  sendSuccess(res, {
+    message: 'Pro Informatique API',
+    version: '1.0.0',
+    status: 'running',
+  });
 });
 
-// --- Services ---
-app.get('/services', async (req, res) => {
-    try {
-        if (!db) {
-            // Mock data when database is not connected
-            const mockServices = [
-                { id: '1', title: 'Réparation PC', description: 'Réparation et maintenance de PC', iconCode: 58709, features: ['Diagnostic', 'Réparation', 'Maintenance'], category: 'Réparation', priceDisplay: 'À partir de 5 000 FCFA' },
-                { id: '2', title: 'Développement Web', description: 'Création de sites web professionnels', iconCode: 58842, features: ['Design', 'Développement', 'SEO'], category: 'Développement', priceDisplay: 'À partir de 50 000 FCFA' },
-                { id: '3', title: 'Cybersécurité', description: 'Audit et protection de vos données', iconCode: 58844, features: ['Audit', 'Protection', 'Formation'], category: 'Sécurité', priceDisplay: 'Sur devis' },
-            ];
-            return res.status(200).json(mockServices);
-        }
-        const servicesSnapshot = await db.collection('services').get();
-        const servicesList = servicesSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        
-        // Return mock data if collection is empty
-        if (servicesList.length === 0) {
-            console.log('Services collection is empty, returning mock data');
-            const mockServices = [
-                { id: '1', title: 'Réparation PC', description: 'Réparation et maintenance de PC', iconCode: 58709, features: ['Diagnostic', 'Réparation', 'Maintenance'], category: 'Réparation', priceDisplay: 'À partir de 5 000 FCFA' },
-                { id: '2', title: 'Développement Web', description: 'Création de sites web professionnels', iconCode: 58842, features: ['Design', 'Développement', 'SEO'], category: 'Développement', priceDisplay: 'À partir de 50 000 FCFA' },
-                { id: '3', title: 'Cybersécurité', description: 'Audit et protection de vos données', iconCode: 58844, features: ['Audit', 'Protection', 'Formation'], category: 'Sécurité', priceDisplay: 'Sur devis' },
-            ];
-            return res.status(200).json(mockServices);
-        }
-        
-        res.status(200).json(servicesList);
-    } catch (error) {
-        console.error('Error fetching services:', error);
-        // Return mock data on error
-        const mockServices = [
-            { id: '1', title: 'Réparation PC', description: 'Réparation et maintenance de PC', iconCode: 58709, features: ['Diagnostic', 'Réparation', 'Maintenance'], category: 'Réparation', priceDisplay: 'À partir de 5 000 FCFA' },
-            { id: '2', title: 'Développement Web', description: 'Création de sites web professionnels', iconCode: 58842, features: ['Design', 'Développement', 'SEO'], category: 'Développement', priceDisplay: 'À partir de 50 000 FCFA' },
-            { id: '3', title: 'Cybersécurité', description: 'Audit et protection de vos données', iconCode: 58844, features: ['Audit', 'Protection', 'Formation'], category: 'Sécurité', priceDisplay: 'Sur devis' },
-        ];
-        res.status(200).json(mockServices);
-    }
+// Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  swaggerOptions: {
+    url: '/swagger.json',
+  },
+}));
+app.get('/swagger.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
 });
 
-app.post('/services', async (req, res) => {
-    try {
-        const newService = req.body;
-        const docRef = await db.collection('services').doc(newService.id);
-        await docRef.set(newService);
-        res.status(201).json({ id: newService.id, message: 'Service created successfully' });
-    } catch (error) {
-        console.error('Error adding service:', error);
-        res.status(500).json({ error: 'Failed to add service' });
-    }
+// Health routes
+app.use('/health', healthRoutes);
+
+// API routes (v1)
+app.use('/v1/auth', authRoutes);
+app.use('/v1/services', servicesRoutes);
+app.use('/v1/products', productsRoutes);
+app.use('/v1/promotions', promotionsRoutes);
+app.use('/v1/reviews', reviewsRoutes);
+app.use('/v1/cyber-tickets', ticketsRoutes);
+app.use('/v1/computers', computersRoutes);
+app.use('/v1/users', usersRoutes);
+// app.use('/v1/products', productRoutes);
+// app.use('/v1/promotions', promotionRoutes);
+// app.use('/v1/reviews', reviewRoutes);
+// app.use('/v1/cyber-tickets', ticketRoutes);
+// app.use('/v1/computers', computerRoutes);
+// app.use('/v1/users', userRoutes);
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Not Found',
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString(),
+  });
 });
 
-app.put('/services/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updatedService = req.body;
-        await db.collection('services').doc(id).update(updatedService);
-        res.status(200).json({ message: 'Service updated successfully' });
-    } catch (error) {
-        console.error('Error updating service:', error);
-        res.status(500).json({ error: 'Failed to update service' });
-    }
+// Error handler (must be last)
+app.use(errorHandler);
+
+// Start server
+const server = app.listen(PORT, () => {
+  logger.info(`Pro Informatique API running on port ${PORT}`);
+  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`API Documentation: http://localhost:${PORT}/api-docs`);
 });
 
-app.delete('/services/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        await db.collection('services').doc(id).delete();
-        res.status(200).json({ message: 'Service deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting service:', error);
-        res.status(500).json({ error: 'Failed to delete service' });
-    }
+// Graceful shutdown
+process.on('SIGTERM', (err: NodeJS.Signals) => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
 });
 
-// --- Products ---
-app.get('/products', async (req, res) => {
-    try {
-        if (!db) {
-            // Mock data when database is not connected
-            const mockProducts = [
-                { id: '1', name: 'Ordinateur Portable HP', description: 'PC portable performant pour le travail', price: 150000, priceDisplay: '150 000 FCFA', category: 'Ordinateurs', imageUrl: 'https://via.placeholder.com/300' },
-                { id: '2', name: 'Clavier Mécanique', description: 'Clavier gaming RGB', price: 25000, priceDisplay: '25 000 FCFA', category: 'Accessoires', imageUrl: 'https://via.placeholder.com/300' },
-                { id: '3', name: 'Souris Gaming', description: 'Souris haute précision', price: 15000, priceDisplay: '15 000 FCFA', category: 'Accessoires', imageUrl: 'https://via.placeholder.com/300' },
-                { id: '4', name: 'Écran 24 pouces', description: 'Écran Full HD IPS', price: 80000, priceDisplay: '80 000 FCFA', category: 'Écrans', imageUrl: 'https://via.placeholder.com/300' },
-            ];
-            return res.status(200).json(mockProducts);
-        }
-        const productsSnapshot = await db.collection('products').get();
-        const productsList = productsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        
-        // Return mock data if collection is empty
-        if (productsList.length === 0) {
-            console.log('Products collection is empty, returning mock data');
-            const mockProducts = [
-                { id: '1', name: 'Ordinateur Portable HP', description: 'PC portable performant pour le travail', price: 150000, priceDisplay: '150 000 FCFA', category: 'Ordinateurs', imageUrl: 'https://via.placeholder.com/300' },
-                { id: '2', name: 'Clavier Mécanique', description: 'Clavier gaming RGB', price: 25000, priceDisplay: '25 000 FCFA', category: 'Accessoires', imageUrl: 'https://via.placeholder.com/300' },
-                { id: '3', name: 'Souris Gaming', description: 'Souris haute précision', price: 15000, priceDisplay: '15 000 FCFA', category: 'Accessoires', imageUrl: 'https://via.placeholder.com/300' },
-                { id: '4', name: 'Écran 24 pouces', description: 'Écran Full HD IPS', price: 80000, priceDisplay: '80 000 FCFA', category: 'Écrans', imageUrl: 'https://via.placeholder.com/300' },
-            ];
-            return res.status(200).json(mockProducts);
-        }
-        
-        res.status(200).json(productsList);
-    } catch (error) {
-        console.error('Error fetching products:', error);
-        // Return mock data on error
-        const mockProducts = [
-            { id: '1', name: 'Ordinateur Portable HP', description: 'PC portable performant pour le travail', price: 150000, priceDisplay: '150 000 FCFA', category: 'Ordinateurs', imageUrl: 'https://via.placeholder.com/300' },
-            { id: '2', name: 'Clavier Mécanique', description: 'Clavier gaming RGB', price: 25000, priceDisplay: '25 000 FCFA', category: 'Accessoires', imageUrl: 'https://via.placeholder.com/300' },
-            { id: '3', name: 'Souris Gaming', description: 'Souris haute précision', price: 15000, priceDisplay: '15 000 FCFA', category: 'Accessoires', imageUrl: 'https://via.placeholder.com/300' },
-            { id: '4', name: 'Écran 24 pouces', description: 'Écran Full HD IPS', price: 80000, priceDisplay: '80 000 FCFA', category: 'Écrans', imageUrl: 'https://via.placeholder.com/300' },
-        ];
-        res.status(200).json(mockProducts);
-    }
-});
-
-app.post('/products', async (req, res) => {
-    try {
-        const newProduct = req.body;
-        const docRef = await db.collection('products').doc(newProduct.id);
-        await docRef.set(newProduct);
-        res.status(201).json({ id: newProduct.id, message: 'Product created successfully' });
-    } catch (error) {
-        console.error('Error adding product:', error);
-        res.status(500).json({ error: 'Failed to add product' });
-    }
-});
-
-app.put('/products/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updatedProduct = req.body;
-        await db.collection('products').doc(id).update(updatedProduct);
-        res.status(200).json({ message: 'Product updated successfully' });
-    } catch (error) {
-        console.error('Error updating product:', error);
-        res.status(500).json({ error: 'Failed to update product' });
-    }
-});
-
-app.delete('/products/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        await db.collection('products').doc(id).delete();
-        res.status(200).json({ message: 'Product deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting product:', error);
-        res.status(500).json({ error: 'Failed to delete product' });
-    }
-});
-
-// --- Reviews ---
-app.get('/reviews', async (req, res) => {
-    try {
-        const { product_id } = req.query;
-        let reviewsSnapshot;
-        if (product_id) {
-            reviewsSnapshot = await db.collection('reviews').where('product_id', '==', product_id).get();
-        } else {
-            reviewsSnapshot = await db.collection('reviews').get();
-        }
-        const reviewsList = reviewsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        res.status(200).json(reviewsList);
-    } catch (error) {
-        console.error('Error fetching reviews:', error);
-        res.status(500).json({ error: 'Failed to fetch reviews' });
-    }
-});
-
-app.post('/reviews', async (req, res) => {
-    try {
-        const newReview = req.body;
-        const docRef = await db.collection('reviews').doc(newReview.id);
-        await docRef.set(newReview);
-        res.status(201).json({ id: newReview.id, message: 'Review created successfully' });
-    } catch (error) {
-        console.error('Error adding review:', error);
-        res.status(500).json({ error: 'Failed to add review' });
-    }
-});
-
-app.delete('/reviews/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        await db.collection('reviews').doc(id).delete();
-        res.status(200).json({ message: 'Review deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting review:', error);
-        res.status(500).json({ error: 'Failed to delete review' });
-    }
-});
-
-// --- Cyber Tickets ---
-app.get('/cyber-tickets', async (req, res) => {
-    try {
-        const ticketsSnapshot = await db.collection('cyber_tickets').get();
-        const ticketsList = ticketsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        res.status(200).json(ticketsList);
-    } catch (error) {
-        console.error('Error fetching cyber tickets:', error);
-        res.status(500).json({ error: 'Failed to fetch cyber tickets' });
-    }
-});
-
-app.post('/cyber-tickets', async (req, res) => {
-    try {
-        const newTicket = req.body;
-        const docRef = await db.collection('cyber_tickets').doc(newTicket.id);
-        await docRef.set(newTicket);
-        res.status(201).json({ id: newTicket.id, message: 'Cyber ticket created successfully' });
-    } catch (error) {
-        console.error('Error adding cyber ticket:', error);
-        res.status(500).json({ error: 'Failed to add cyber ticket' });
-    }
-});
-
-app.put('/cyber-tickets/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updatedTicket = req.body;
-        await db.collection('cyber_tickets').doc(id).update(updatedTicket);
-        res.status(200).json({ message: 'Cyber ticket updated successfully' });
-    } catch (error) {
-        console.error('Error updating cyber ticket:', error);
-        res.status(500).json({ error: 'Failed to update cyber ticket' });
-    }
-});
-
-app.delete('/cyber-tickets/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        await db.collection('cyber_tickets').doc(id).delete();
-        res.status(200).json({ message: 'Cyber ticket deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting cyber ticket:', error);
-        res.status(500).json({ error: 'Failed to delete cyber ticket' });
-    }
-});
-
-// --- Computers ---
-app.get('/computers', async (req, res) => {
-    try {
-        const computersSnapshot = await db.collection('computers').get();
-        const computersList = computersSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        res.status(200).json(computersList);
-    } catch (error) {
-        console.error('Error fetching computers:', error);
-        res.status(500).json({ error: 'Failed to fetch computers' });
-    }
-});
-
-app.put('/computers/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updatedComputer = req.body;
-        await db.collection('computers').doc(id).update(updatedComputer);
-        res.status(200).json({ message: 'Computer updated successfully' });
-    } catch (error) {
-        console.error('Error updating computer:', error);
-        res.status(500).json({ error: 'Failed to update computer' });
-    }
-});
-
-// --- Promotions ---
-app.get('/promotions', async (req, res) => {
-    try {
-        if (!db) {
-            // Mock data when database is not connected
-            const mockPromotions = [
-                { id: '1', title: 'Promo Été', description: '-20% sur tous les ordinateurs portables', imageUrl: 'https://via.placeholder.com/400' },
-                { id: '2', title: 'Pack Gaming', description: 'Clavier + Souris à -30%', imageUrl: 'https://via.placeholder.com/400' },
-            ];
-            return res.status(200).json(mockPromotions);
-        }
-        const promotionsSnapshot = await db.collection('promotions').get();
-        const promotionsList = promotionsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        res.status(200).json(promotionsList);
-    } catch (error) {
-        console.error('Error fetching promotions:', error);
-        res.status(500).json({ error: 'Failed to fetch promotions' });
-    }
-});
-
-app.post('/promotions', async (req, res) => {
-    try {
-        const newPromotion = req.body;
-        const docRef = await db.collection('promotions').doc(newPromotion.id);
-        await docRef.set(newPromotion);
-        res.status(201).json({ id: newPromotion.id, message: 'Promotion created successfully' });
-    } catch (error) {
-        console.error('Error adding promotion:', error);
-        res.status(500).json({ error: 'Failed to add promotion' });
-    }
-});
-
-app.put('/promotions/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updatedPromotion = req.body;
-        await db.collection('promotions').doc(id).update(updatedPromotion);
-        res.status(200).json({ message: 'Promotion updated successfully' });
-    } catch (error) {
-        console.error('Error updating promotion:', error);
-        res.status(500).json({ error: 'Failed to update promotion' });
-    }
-});
-
-app.delete('/promotions/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        await db.collection('promotions').doc(id).delete();
-        res.status(200).json({ message: 'Promotion deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting promotion:', error);
-        res.status(500).json({ error: 'Failed to delete promotion' });
-    }
-});
-
-// --- Authentication ---
-
-app.post('/auth/register', async (req, res) => {
-    try {
-        const { email, password, name } = req.body;
-        
-        if (!email || !password || !name) {
-            return res.status(400).json({ error: 'Email, password and name are required' });
-        }
-
-        if (!db) {
-            // Mock registration when database is not connected
-            console.log('Mock registration:', { email, name });
-            return res.status(201).json({ 
-                message: 'User created successfully (mock mode)',
-                userId: 'mock-' + Date.now() 
-            });
-        }
-
-        try {
-            // Check if user already exists
-            const existingUser = await db.collection('users').where('email', '==', email).get();
-            if (!existingUser.empty) {
-                return res.status(400).json({ error: 'User already exists' });
-            }
-
-            // Create user
-            const userRef = await db.collection('users').doc();
-            await userRef.set({
-                email,
-                password, // In production, hash this!
-                name,
-                createdAt: new Date().toISOString(),
-                role: 'admin',
-            });
-
-            res.status(201).json({ 
-                message: 'User created successfully',
-                userId: userRef.id 
-            });
-        } catch (dbError) {
-            console.error('Database error during registration:', dbError);
-            // Fallback to mock mode if database fails
-            console.log('Falling back to mock registration');
-            return res.status(201).json({ 
-                message: 'User created successfully (mock fallback)',
-                userId: 'mock-' + Date.now() 
-            });
-        }
-    } catch (error) {
-        console.error('Error registering user:', error);
-        res.status(500).json({ error: 'Failed to register user' });
-    }
-});
-
-app.post('/auth/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
-        }
-
-        if (!db) {
-            // Mock login when database is not connected
-            console.log('Mock login attempt:', email);
-            // For demo purposes, accept any login
-            return res.status(200).json({ 
-                message: 'Login successful (mock mode)',
-                user: {
-                    id: 'mock-user-' + Date.now(),
-                    email: email,
-                    name: 'Mock User',
-                    role: 'admin',
-                },
-                token: 'mock-token-' + Date.now()
-            });
-        }
-
-        // Find user
-        const userSnapshot = await db.collection('users').where('email', '==', email).get();
-        if (userSnapshot.empty) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        const userDoc = userSnapshot.docs[0];
-        const userData = userDoc.data();
-
-        // Check password (in production, use bcrypt)
-        if (userData.password !== password) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        res.status(200).json({ 
-            message: 'Login successful',
-            user: {
-                id: userDoc.id,
-                email: userData.email,
-                name: userData.name,
-                role: userData.role,
-            },
-            token: 'simple-token-' + userDoc.id // In production, use JWT
-        });
-    } catch (error) {
-        console.error('Error logging in:', error);
-        res.status(500).json({ error: 'Failed to login' });
-    }
-});
-
-// --- Users Management (Admin) ---
-
-app.get('/users', async (req, res) => {
-    try {
-        if (!db) {
-            // Mock data when database is not connected
-            const mockUsers = [
-                { id: '1', email: 'admin@proinformatique.dev', name: 'Admin User', role: 'admin', createdAt: new Date().toISOString() },
-                { id: '2', email: 'user@example.com', name: 'Regular User', role: 'user', createdAt: new Date().toISOString() },
-            ];
-            return res.status(200).json(mockUsers);
-        }
-        const usersSnapshot = await db.collection('users').get();
-        const usersList = usersSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        res.status(200).json(usersList);
-    } catch (error) {
-        console.error('Error fetching users:', error);
-        res.status(500).json({ error: 'Failed to fetch users' });
-    }
-});
-
-app.delete('/users/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        await db.collection('users').doc(id).delete();
-        res.status(200).json({ message: 'User deleted successfully' });
-    } catch (error) {
-        console.error('Error deleting user:', error);
-        res.status(500).json({ error: 'Failed to delete user' });
-    }
-});
-
-app.put('/users/:id/role', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { role } = req.body;
-        await db.collection('users').doc(id).update({ role });
-        res.status(200).json({ message: 'User role updated successfully' });
-    } catch (error) {
-        console.error('Error updating user role:', error);
-        res.status(500).json({ error: 'Failed to update user role' });
-    }
+process.on('SIGINT', (err: NodeJS.Signals) => {
+  logger.info('SIGINT received, shutting down gracefully');
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
 });
 
 export default app;
