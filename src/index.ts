@@ -305,4 +305,117 @@ app.delete('/promotions/:id', async (req, res) => {
     }
 });
 
+// --- Authentication ---
+
+app.post('/auth/register', async (req, res) => {
+    try {
+        const { email, password, name } = req.body;
+        
+        if (!email || !password || !name) {
+            return res.status(400).json({ error: 'Email, password and name are required' });
+        }
+
+        // Check if user already exists
+        const existingUser = await db.collection('users').where('email', '==', email).get();
+        if (!existingUser.empty) {
+            return res.status(400).json({ error: 'User already exists' });
+        }
+
+        // Create user
+        const userRef = await db.collection('users').doc();
+        await userRef.set({
+            email,
+            password, // In production, hash this!
+            name,
+            createdAt: new Date().toISOString(),
+            role: 'user',
+        });
+
+        res.status(201).json({ 
+            message: 'User created successfully',
+            userId: userRef.id 
+        });
+    } catch (error) {
+        console.error('Error registering user:', error);
+        res.status(500).json({ error: 'Failed to register user' });
+    }
+});
+
+app.post('/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        // Find user
+        const userSnapshot = await db.collection('users').where('email', '==', email).get();
+        if (userSnapshot.empty) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const userDoc = userSnapshot.docs[0];
+        const userData = userDoc.data();
+
+        // Check password (in production, use bcrypt)
+        if (userData.password !== password) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        res.status(200).json({ 
+            message: 'Login successful',
+            user: {
+                id: userDoc.id,
+                email: userData.email,
+                name: userData.name,
+                role: userData.role,
+            },
+            token: 'simple-token-' + userDoc.id // In production, use JWT
+        });
+    } catch (error) {
+        console.error('Error logging in:', error);
+        res.status(500).json({ error: 'Failed to login' });
+    }
+});
+
+// --- Users Management (Admin) ---
+
+app.get('/users', async (req, res) => {
+    try {
+        const usersSnapshot = await db.collection('users').get();
+        const usersList = usersSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        res.status(200).json(usersList);
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ error: 'Failed to fetch users' });
+    }
+});
+
+app.delete('/users/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.collection('users').doc(id).delete();
+        res.status(200).json({ message: 'User deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        res.status(500).json({ error: 'Failed to delete user' });
+    }
+});
+
+app.put('/users/:id/role', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role } = req.body;
+        await db.collection('users').doc(id).update({ role });
+        res.status(200).json({ message: 'User role updated successfully' });
+    } catch (error) {
+        console.error('Error updating user role:', error);
+        res.status(500).json({ error: 'Failed to update user role' });
+    }
+});
+
 export default app;
