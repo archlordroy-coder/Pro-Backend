@@ -2,7 +2,6 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
 dotenv.config();
@@ -11,43 +10,19 @@ dotenv.config();
 // Assumes GOOGLE_APPLICATION_CREDENTIALS points to the service account JSON file
 initializeApp();
 
-const auth = getAuth();
 const db = getFirestore();
 const app = express();
 
-app.use(cors({ origin: 'https://proinformatique.dev' }));
+app.use(cors({ origin: '*' }));
 app.use(express.json());
-
-// Middleware d'authentification
-const authenticate = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    const token = authHeader.split('Bearer ')[1];
-    if (!token) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    try {
-        await auth.verifyIdToken(token);
-        next();
-    } catch (error) {
-        res.status(401).json({ error: 'Invalid or expired token' });
-    }
-};
 
 // Racine de l'API
 app.get('/', (req, res) => {
     res.status(200).json({ message: 'Pro Informatique API is up and running' });
 });
 
-// Appliquer l'authentification aux routes protégées
-app.use('/api/services', authenticate);
-app.use('/api/products', authenticate);
-app.use('/api/orders', authenticate);
-
 // --- Services ---
-app.get('/api/services', async (req, res) => {
+app.get('/services', async (req, res) => {
     try {
         const servicesSnapshot = await db.collection('services').get();
         const servicesList = servicesSnapshot.docs.map(doc => ({
@@ -61,19 +36,43 @@ app.get('/api/services', async (req, res) => {
     }
 });
 
-app.post('/api/services', async (req, res) => {
+app.post('/services', async (req, res) => {
     try {
         const newService = req.body;
-        const docRef = await db.collection('services').add(newService);
-        res.status(201).json({ id: docRef.id, message: 'Service created successfully' });
+        const docRef = await db.collection('services').doc(newService.id);
+        await docRef.set(newService);
+        res.status(201).json({ id: newService.id, message: 'Service created successfully' });
     } catch (error) {
         console.error('Error adding service:', error);
         res.status(500).json({ error: 'Failed to add service' });
     }
 });
 
+app.put('/services/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updatedService = req.body;
+        await db.collection('services').doc(id).update(updatedService);
+        res.status(200).json({ message: 'Service updated successfully' });
+    } catch (error) {
+        console.error('Error updating service:', error);
+        res.status(500).json({ error: 'Failed to update service' });
+    }
+});
+
+app.delete('/services/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.collection('services').doc(id).delete();
+        res.status(200).json({ message: 'Service deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting service:', error);
+        res.status(500).json({ error: 'Failed to delete service' });
+    }
+});
+
 // --- Products ---
-app.get('/api/products', async (req, res) => {
+app.get('/products', async (req, res) => {
     try {
         const productsSnapshot = await db.collection('products').get();
         const productsList = productsSnapshot.docs.map(doc => ({
@@ -87,40 +86,159 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-app.post('/api/products', async (req, res) => {
+app.post('/products', async (req, res) => {
     try {
         const newProduct = req.body;
-        const docRef = await db.collection('products').add(newProduct);
-        res.status(201).json({ id: docRef.id, message: 'Product created successfully' });
+        const docRef = await db.collection('products').doc(newProduct.id);
+        await docRef.set(newProduct);
+        res.status(201).json({ id: newProduct.id, message: 'Product created successfully' });
     } catch (error) {
         console.error('Error adding product:', error);
         res.status(500).json({ error: 'Failed to add product' });
     }
 });
 
-// --- Orders ---
-app.get('/api/orders', async (req, res) => {
+app.put('/products/:id', async (req, res) => {
     try {
-        const ordersSnapshot = await db.collection('orders').get();
-        const ordersList = ordersSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        res.status(200).json(ordersList);
+        const { id } = req.params;
+        const updatedProduct = req.body;
+        await db.collection('products').doc(id).update(updatedProduct);
+        res.status(200).json({ message: 'Product updated successfully' });
     } catch (error) {
-        console.error('Error fetching orders:', error);
-        res.status(500).json({ error: 'Failed to fetch orders' });
+        console.error('Error updating product:', error);
+        res.status(500).json({ error: 'Failed to update product' });
     }
 });
 
-app.post('/api/orders', async (req, res) => {
+app.delete('/products/:id', async (req, res) => {
     try {
-        const newOrder = req.body;
-        const docRef = await db.collection('orders').add(newOrder);
-        res.status(201).json({ id: docRef.id, message: 'Order created successfully' });
+        const { id } = req.params;
+        await db.collection('products').doc(id).delete();
+        res.status(200).json({ message: 'Product deleted successfully' });
     } catch (error) {
-        console.error('Error adding order:', error);
-        res.status(500).json({ error: 'Failed to add order' });
+        console.error('Error deleting product:', error);
+        res.status(500).json({ error: 'Failed to delete product' });
+    }
+});
+
+// --- Reviews ---
+app.get('/reviews', async (req, res) => {
+    try {
+        const { product_id } = req.query;
+        let reviewsSnapshot;
+        if (product_id) {
+            reviewsSnapshot = await db.collection('reviews').where('product_id', '==', product_id).get();
+        } else {
+            reviewsSnapshot = await db.collection('reviews').get();
+        }
+        const reviewsList = reviewsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        res.status(200).json(reviewsList);
+    } catch (error) {
+        console.error('Error fetching reviews:', error);
+        res.status(500).json({ error: 'Failed to fetch reviews' });
+    }
+});
+
+app.post('/reviews', async (req, res) => {
+    try {
+        const newReview = req.body;
+        const docRef = await db.collection('reviews').doc(newReview.id);
+        await docRef.set(newReview);
+        res.status(201).json({ id: newReview.id, message: 'Review created successfully' });
+    } catch (error) {
+        console.error('Error adding review:', error);
+        res.status(500).json({ error: 'Failed to add review' });
+    }
+});
+
+app.delete('/reviews/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.collection('reviews').doc(id).delete();
+        res.status(200).json({ message: 'Review deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting review:', error);
+        res.status(500).json({ error: 'Failed to delete review' });
+    }
+});
+
+// --- Cyber Tickets ---
+app.get('/cyber-tickets', async (req, res) => {
+    try {
+        const ticketsSnapshot = await db.collection('cyber_tickets').get();
+        const ticketsList = ticketsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        res.status(200).json(ticketsList);
+    } catch (error) {
+        console.error('Error fetching cyber tickets:', error);
+        res.status(500).json({ error: 'Failed to fetch cyber tickets' });
+    }
+});
+
+app.post('/cyber-tickets', async (req, res) => {
+    try {
+        const newTicket = req.body;
+        const docRef = await db.collection('cyber_tickets').doc(newTicket.id);
+        await docRef.set(newTicket);
+        res.status(201).json({ id: newTicket.id, message: 'Cyber ticket created successfully' });
+    } catch (error) {
+        console.error('Error adding cyber ticket:', error);
+        res.status(500).json({ error: 'Failed to add cyber ticket' });
+    }
+});
+
+app.put('/cyber-tickets/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updatedTicket = req.body;
+        await db.collection('cyber_tickets').doc(id).update(updatedTicket);
+        res.status(200).json({ message: 'Cyber ticket updated successfully' });
+    } catch (error) {
+        console.error('Error updating cyber ticket:', error);
+        res.status(500).json({ error: 'Failed to update cyber ticket' });
+    }
+});
+
+app.delete('/cyber-tickets/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        await db.collection('cyber_tickets').doc(id).delete();
+        res.status(200).json({ message: 'Cyber ticket deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting cyber ticket:', error);
+        res.status(500).json({ error: 'Failed to delete cyber ticket' });
+    }
+});
+
+// --- Computers ---
+app.get('/computers', async (req, res) => {
+    try {
+        const computersSnapshot = await db.collection('computers').get();
+        const computersList = computersSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        res.status(200).json(computersList);
+    } catch (error) {
+        console.error('Error fetching computers:', error);
+        res.status(500).json({ error: 'Failed to fetch computers' });
+    }
+});
+
+app.put('/computers/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updatedComputer = req.body;
+        await db.collection('computers').doc(id).update(updatedComputer);
+        res.status(200).json({ message: 'Computer updated successfully' });
+    } catch (error) {
+        console.error('Error updating computer:', error);
+        res.status(500).json({ error: 'Failed to update computer' });
     }
 });
 
