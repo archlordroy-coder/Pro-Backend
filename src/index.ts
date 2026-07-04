@@ -8,22 +8,33 @@ dotenv.config();
 
 // Configuration Firebase Admin
 let adminApp;
-if (getApps().length > 0) {
-  adminApp = getApp();
-} else {
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (serviceAccountJson) {
-    const serviceAccount = JSON.parse(serviceAccountJson);
-    adminApp = initializeApp({
-      credential: require('firebase-admin').credential.cert(serviceAccount),
-    });
+let db;
+
+try {
+  if (getApps().length > 0) {
+    adminApp = getApp();
   } else {
-    // Utilise les identifiants par défaut (GOOGLE_APPLICATION_CREDENTIALS)
-    adminApp = initializeApp();
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    if (serviceAccountJson) {
+      const serviceAccount = JSON.parse(serviceAccountJson);
+      adminApp = initializeApp({
+        credential: require('firebase-admin').credential.cert(serviceAccount),
+      });
+      console.log('Firebase initialized with service account JSON');
+    } else {
+      // Utilise les identifiants par défaut (GOOGLE_APPLICATION_CREDENTIALS)
+      adminApp = initializeApp();
+      console.log('Firebase initialized with default credentials');
+    }
   }
+  db = getFirestore(adminApp);
+  console.log('Firestore database connected successfully');
+} catch (error) {
+  console.error('Firebase initialization error:', error);
+  console.error('API will run in mock mode without database');
+  db = null;
 }
 
-const db = getFirestore(adminApp);
 const app = express();
 
 app.use(cors({ origin: '*' }));
@@ -31,12 +42,21 @@ app.use(express.json());
 
 // Racine de l'API
 app.get('/', (req, res) => {
-    res.status(200).json({ message: 'Pro Informatique API is up and running' });
+    res.status(200).json({ message: 'Pro Informatique API is up and running', dbConnected: !!db });
 });
 
 // --- Services ---
 app.get('/services', async (req, res) => {
     try {
+        if (!db) {
+            // Mock data when database is not connected
+            const mockServices = [
+                { id: '1', title: 'Réparation PC', description: 'Réparation et maintenance de PC', iconCode: 58709, features: ['Diagnostic', 'Réparation', 'Maintenance'], category: 'Réparation', priceDisplay: 'À partir de 5 000 FCFA' },
+                { id: '2', title: 'Développement Web', description: 'Création de sites web professionnels', iconCode: 58842, features: ['Design', 'Développement', 'SEO'], category: 'Développement', priceDisplay: 'À partir de 50 000 FCFA' },
+                { id: '3', title: 'Cybersécurité', description: 'Audit et protection de vos données', iconCode: 58844, features: ['Audit', 'Protection', 'Formation'], category: 'Sécurité', priceDisplay: 'Sur devis' },
+            ];
+            return res.status(200).json(mockServices);
+        }
         const servicesSnapshot = await db.collection('services').get();
         const servicesList = servicesSnapshot.docs.map(doc => ({
             id: doc.id,
@@ -87,6 +107,16 @@ app.delete('/services/:id', async (req, res) => {
 // --- Products ---
 app.get('/products', async (req, res) => {
     try {
+        if (!db) {
+            // Mock data when database is not connected
+            const mockProducts = [
+                { id: '1', name: 'Ordinateur Portable HP', description: 'PC portable performant pour le travail', price: 150000, priceDisplay: '150 000 FCFA', category: 'Ordinateurs', imageUrl: 'https://via.placeholder.com/300' },
+                { id: '2', name: 'Clavier Mécanique', description: 'Clavier gaming RGB', price: 25000, priceDisplay: '25 000 FCFA', category: 'Accessoires', imageUrl: 'https://via.placeholder.com/300' },
+                { id: '3', name: 'Souris Gaming', description: 'Souris haute précision', price: 15000, priceDisplay: '15 000 FCFA', category: 'Accessoires', imageUrl: 'https://via.placeholder.com/300' },
+                { id: '4', name: 'Écran 24 pouces', description: 'Écran Full HD IPS', price: 80000, priceDisplay: '80 000 FCFA', category: 'Écrans', imageUrl: 'https://via.placeholder.com/300' },
+            ];
+            return res.status(200).json(mockProducts);
+        }
         const productsSnapshot = await db.collection('products').get();
         const productsList = productsSnapshot.docs.map(doc => ({
             id: doc.id,
@@ -258,6 +288,14 @@ app.put('/computers/:id', async (req, res) => {
 // --- Promotions ---
 app.get('/promotions', async (req, res) => {
     try {
+        if (!db) {
+            // Mock data when database is not connected
+            const mockPromotions = [
+                { id: '1', title: 'Promo Été', description: '-20% sur tous les ordinateurs portables', imageUrl: 'https://via.placeholder.com/400' },
+                { id: '2', title: 'Pack Gaming', description: 'Clavier + Souris à -30%', imageUrl: 'https://via.placeholder.com/400' },
+            ];
+            return res.status(200).json(mockPromotions);
+        }
         const promotionsSnapshot = await db.collection('promotions').get();
         const promotionsList = promotionsSnapshot.docs.map(doc => ({
             id: doc.id,
@@ -315,6 +353,15 @@ app.post('/auth/register', async (req, res) => {
             return res.status(400).json({ error: 'Email, password and name are required' });
         }
 
+        if (!db) {
+            // Mock registration when database is not connected
+            console.log('Mock registration:', { email, name });
+            return res.status(201).json({ 
+                message: 'User created successfully (mock mode)',
+                userId: 'mock-' + Date.now() 
+            });
+        }
+
         // Check if user already exists
         const existingUser = await db.collection('users').where('email', '==', email).get();
         if (!existingUser.empty) {
@@ -347,6 +394,22 @@ app.post('/auth/login', async (req, res) => {
         
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        if (!db) {
+            // Mock login when database is not connected
+            console.log('Mock login attempt:', email);
+            // For demo purposes, accept any login
+            return res.status(200).json({ 
+                message: 'Login successful (mock mode)',
+                user: {
+                    id: 'mock-user-' + Date.now(),
+                    email: email,
+                    name: 'Mock User',
+                    role: 'admin',
+                },
+                token: 'mock-token-' + Date.now()
+            });
         }
 
         // Find user
@@ -383,6 +446,14 @@ app.post('/auth/login', async (req, res) => {
 
 app.get('/users', async (req, res) => {
     try {
+        if (!db) {
+            // Mock data when database is not connected
+            const mockUsers = [
+                { id: '1', email: 'admin@proinformatique.dev', name: 'Admin User', role: 'admin', createdAt: new Date().toISOString() },
+                { id: '2', email: 'user@example.com', name: 'Regular User', role: 'user', createdAt: new Date().toISOString() },
+            ];
+            return res.status(200).json(mockUsers);
+        }
         const usersSnapshot = await db.collection('users').get();
         const usersList = usersSnapshot.docs.map(doc => ({
             id: doc.id,
