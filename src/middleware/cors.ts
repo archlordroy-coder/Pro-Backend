@@ -15,22 +15,10 @@ const defaultOrigins = [
 const finalAllowedOrigins = allowedOrigins.length > 0 ? allowedOrigins : defaultOrigins;
 
 const corsOptions: CorsOptions = {
-  origin: (origin, callback) => {
-    // Allow requests with no origin (like curl, Postman, mobile apps, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    if (finalAllowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      logger.warn(`CORS rejection for origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: true, // Allow all origins temporarily for debugging
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With', 'Accept'],
   maxAge: 600, // 10 minutes
 };
 

@@ -29,8 +29,10 @@ initializeFirebase().catch(err => {
 });
 
 // Middleware
-app.use(helmet()); // Security headers
-app.use(corsMiddleware()); // CORS protection
+app.use(corsMiddleware()); // CORS protection FIRST!
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+})); // Security headers with CORS support
 app.use(express.json()); // JSON body parser
 app.use(express.urlencoded({ extended: true })); // URL encoded body parser
 
