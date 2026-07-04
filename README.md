@@ -260,6 +260,89 @@ Pour déployer :
 vercel --prod
 ```
 
+### URL de Production
+
+L'API est accessible à l'adresse suivante :
+```
+https://api.proinformatique.dev
+```
+
+### Configuration des Variables d'Environnement sur Vercel
+
+1. Aller sur le dashboard Vercel
+2. Sélectionner le projet
+3. Aller dans Settings > Environment Variables
+4. Ajouter `FIREBASE_SERVICE_ACCOUNT_JSON` avec le JSON du compte de service Firebase
+5. Redéployer l'application
+
+## Utilisation de l'API par les Autres Projets
+
+### Web Panel
+
+Le web panel (Next.js) utilise cette API via le fichier `lib/api.ts` :
+
+```typescript
+const API_BASE_URL = 'https://api.proinformatique.dev';
+
+// Exemple d'appel
+export async function getServices() {
+  const response = await fetch(`${API_BASE_URL}/services`);
+  return response.json();
+}
+```
+
+### Application Mobile
+
+L'application mobile (Flutter) utilise cette API via le fichier `lib/services/api_service.dart` :
+
+```dart
+const String baseUrl = 'https://api.proinformatique.dev';
+
+// Exemple d'appel
+Future<List<Service>> getServices() async {
+  final response = await http.get(Uri.parse('$baseUrl/services'));
+  return json.decode(response.body);
+}
+```
+
+### Intégration
+
+Pour intégrer cette API dans un nouveau projet :
+
+1. **Installer les dépendances HTTP** :
+   - JavaScript/TypeScript : `npm install axios` ou utiliser `fetch`
+   - Flutter : `flutter pub add http`
+
+2. **Configurer l'URL de base** :
+   ```typescript
+   const API_BASE_URL = 'https://api.proinformatique.dev';
+   ```
+
+3. **Faire des requêtes** :
+   ```typescript
+   // GET
+   const response = await fetch(`${API_BASE_URL}/services`);
+   const data = await response.json();
+
+   // POST
+   const response = await fetch(`${API_BASE_URL}/auth/login`, {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ email, password })
+   });
+   ```
+
+4. **Gérer les erreurs** :
+   ```typescript
+   try {
+     const response = await fetch(`${API_BASE_URL}/services`);
+     if (!response.ok) throw new Error('API error');
+     const data = await response.json();
+   } catch (error) {
+     console.error('Error:', error);
+   }
+   ```
+
 ## Structure du Projet
 
 ```
